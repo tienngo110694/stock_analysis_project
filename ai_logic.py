@@ -13,8 +13,9 @@ class GeminiProcessor:
         prompt = f"""
         Phân tích yêu cầu sau đây về chứng khoán: "{user_input}"
         Trả về kết quả dưới dạng JSON với các trường:
-        - stock_code: Mã cổ phiếu (ví dụ: VNM, FPT)
-        - info_needed: Danh sách các loại thông tin yêu cầu (price, financial, fund)
+        - stock_code: Mã cổ phiếu (ví dụ: VNM, FPT). Nếu không có mã chứng khoán nào được nhắc đến, trả về null.
+        - info_needed: Danh sách các loại thông tin yêu cầu (price, financial, company)
+        Lưu ý: "company" thay thế cho "fund" để lấy thông tin hồ sơ doanh nghiệp.
         """
         response = await self.client.aio.models.generate_content(
             model=self.model,
