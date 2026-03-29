@@ -1,0 +1,5 @@
+overall flow: 
+1: chat in Vietnamese natural language about the stock code and request, on discord
+2: feed that into gemini nodes, which summarize request to: related stock, information (price, financial, fund ...).
+3: output of 2, will be feed into class stock_information_collect, to collect related financial info.
+4: output of 3, will be feed another gemini nodes, which is the node summarize all data before reply to chat on discord
