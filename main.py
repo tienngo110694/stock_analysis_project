@@ -22,13 +22,39 @@ if "your_discord_bot_token_here" in TOKEN or "your_gemini_api_key_here" in GEMIN
     print("Lỗi: Bạn cần thay thế Token và API Key thật vào file .env thay vì sử dụng văn bản mẫu.")
     exit(1)
 
-bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
+class StockBot(commands.Bot):
+    def __init__(self):
+        super().__init__(command_prefix="!", intents=discord.Intents.all())
+        self.session = None
+
+    async def setup_hook(self):
+        # Initialize a persistent session for the bot's lifetime
+        self.session = aiohttp.ClientSession()
+
+    async def close(self):
+        if self.session:
+            await self.session.close()
+        await super().close()
+
+bot = StockBot()
 ai = GeminiProcessor(GEMINI_KEY)
 collector = StockInformationCollect()
 
 @bot.event
 async def on_ready():
     print(f'Bot {bot.user} đã sẵn sàng!')
+
+@bot.event
+async def on_message(message):
+    if message.author.bot:
+        return
+
+    ctx = await bot.get_context(message)
+    if ctx.valid:
+        await bot.process_commands(message)
+    else:
+        # Xử lý ngôn ngữ tự nhiên khi không dùng prefix "!"
+        await analyze_stock_logic(ctx, message.content, is_explicit=False)
 
 @bot.event
 async def on_command_error(ctx, error):
@@ -50,13 +76,25 @@ async def on_command_error(ctx, error):
 @bot.command(name="stock")
 async def analyze_stock(ctx, *, user_request: str):
     """
-    Flow implementation
+    Lệnh phân tích mã chứng khoán thủ công
     """
+    await analyze_stock_logic(ctx, user_request, is_explicit=True)
+
+async def analyze_stock_logic(ctx, user_request: str, is_explicit: bool):
+    if not user_request or len(user_request.strip()) < 3:
+        return
+
     async with ctx.typing():
         try:
             # Step 2: Summarize request via Gemini
             summary = await ai.summarize_request(user_request)
             stock_code = summary.get("stock_code")
+
+            if not stock_code:
+                if is_explicit:
+                    await ctx.send("⚠️ Không tìm thấy mã chứng khoán trong yêu cầu của bạn.")
+                return
+
             info_needed = summary.get("info_needed", ["price"])
 
             # Step 3: Collect data
@@ -75,17 +113,16 @@ async def analyze_stock(ctx, *, user_request: str):
                 "data": raw_data
             }
 
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    N8N_WEBHOOK_URL, 
-                    data=json.dumps(payload, default=str), 
-                    headers={'Content-Type': 'application/json'}, 
-                    timeout=10
-                ) as response:
-                    if response.status in [200, 201]:
-                        await ctx.send(f"✅ Đã lấy dữ liệu cho mã `{stock_code}` và gửi lên n8n thành công để xử lý!")
-                    else:
-                        await ctx.send(f"⚠️ Đã lấy được dữ liệu nhưng gửi lên n8n thất bại (Mã lỗi: {response.status}).")
+            async with bot.session.post(
+                N8N_WEBHOOK_URL, 
+                data=json.dumps(payload, default=str), 
+                headers={'Content-Type': 'application/json'}, 
+                timeout=10
+            ) as response:
+                if response.status in [200, 201]:
+                    await ctx.send(f"✅ Đã lấy dữ liệu cho mã `{stock_code}` và gửi lên n8n thành công!")
+                else:
+                    await ctx.send(f"⚠️ Gửi lên n8n thất bại (Mã lỗi: {response.status}).")
                 
         except Exception as e:
             await ctx.send(f"Đã xảy ra lỗi khi xử lý yêu cầu: {str(e)}")

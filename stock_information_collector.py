@@ -21,8 +21,8 @@ class StockInformationCollect:
                 results["price_info"] = self._fetch_price(stock_code)
             if "financial" in info_types:
                 results["financial_info"] = self._fetch_financials(stock_code)
-            if "fund" in info_types:
-                results["fund_info"] = self._fetch_company_info(stock_code)
+            if "company" in info_types or "fund" in info_types:
+                results["company_info"] = self._fetch_company_info(stock_code)
             return results
 
         fetched_results = await loop.run_in_executor(None, fetch_sync)
@@ -38,10 +38,10 @@ class StockInformationCollect:
             if isinstance(df, pd.DataFrame) and not df.empty:
                 df.columns = df.columns.map(str)
                 # Return last 5 days of data for trend analysis
-                return df.tail(5).to_dict(orient='records')
+                return df.tail(30).to_dict(orient='records')
             return "Dữ liệu giá không khả dụng."
-        except:
-            return "Lỗi khi truy xuất dữ liệu giá."
+        except Exception as e:
+            return f"Lỗi khi truy xuất dữ liệu giá: {str(e)}"
 
     def _fetch_financials(self, symbol):
         try:
@@ -53,8 +53,8 @@ class StockInformationCollect:
                 df.columns = df.columns.map(str)
                 return df.to_dict()
             return "Chỉ số tài chính không khả dụng."
-        except:
-            return "Lỗi khi truy xuất chỉ số tài chính."
+        except Exception as e:
+            return f"Lỗi khi truy xuất chỉ số tài chính: {str(e)}"
 
     def _fetch_company_info(self, symbol):
         try:
@@ -70,5 +70,5 @@ class StockInformationCollect:
             elif isinstance(result, dict):
                 return result
             return "Hồ sơ công ty không khả dụng."
-        except:
-            return "Lỗi khi truy xuất hồ sơ công ty."
+        except Exception as e:
+            return f"Lỗi khi truy xuất hồ sơ công ty: {str(e)}"
