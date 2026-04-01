@@ -2,6 +2,13 @@
 
 A professional-grade Discord bot designed to provide deep financial insights into the Vietnamese stock market by combining the power of **Google Gemini AI** and the **vnstock** library.
 
+---
+
+### 🛡️ Development Support
+Developed and maintained using the **Antigravity IDE**, powered by **Gemini** to ensure high-performance code and state-of-the-art AI integration.
+
+---
+
 ## 🚀 Key Features
 
 - **AI-Driven Intent Recognition**: Uses Gemini to understand natural language requests (e.g., "Cho mình xem tài chính của VNM") and extract stock tickers and data requirements.
