@@ -1,5 +1,12 @@
 overall flow: 
-1: chat in Vietnamese natural language about the stock code and request, on discord
-2: feed that into gemini nodes, which summarize request to: related stock, information (price, financial, fund ...).
-3: output of 2, will be feed into class stock_information_collect, to collect related financial info.
-4: output of 3, will be feed another gemini nodes, which is the node summarize all data before reply to chat on discord
+0: get financial data of stock on HOSE, stock market in Vietnam and insert into ClickHouse database
+1: chat in Vietnamese natural language about the stock code and request, on discord.
+2.1: it triggers flow on n8n, which will get financial data from ClickHouse database and feed into gemini nodes, which will analyze financial data.
+2.2: another Gemini node in charge of searching for latest news about macro economy and industry of the stock in Vietnam.
+2.3: another Gemini node in charge of searching for latest news about the stock code.
+3: output of 2.1, 2.2, 2.3, will be feed into another gemini node, which is the node summarize all data 
+  , analyze and give advice. It should contains buy/sell/neutral at specific price 
+  , reasons which's structured into 3 parts: financial analysis, macro economy analysis, industry analysis.
+  , and finally output the result into discord. 
+4. Output from step 3 will be feed into Ollama to embed into vector database (ClickHouse),
+    and use it to answer questions about stock analysis in the future.

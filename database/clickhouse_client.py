@@ -1,35 +1,24 @@
-import os
 import pandas as pd
 import clickhouse_connect
-from dotenv import load_dotenv
-
-# Load environment variables from .env file
-load_dotenv()
+from config import Config
 
 class ClickHouseStockHandler:
     """
     Handles database operations for storing stock data into ClickHouse.
     """
-    def __init__(self, host=None, port=None, username=None, password=None, database='default'):
-        self.host = host or os.getenv('CLICKHOUSE_HOST', 'localhost')
-        self.port = int(port or os.getenv('CLICKHOUSE_PORT', 8123))
-        self.username = username or os.getenv('CLICKHOUSE_USER', 'default')
-        self.password = password or os.getenv('CLICKHOUSE_PASSWORD', '')
-        self.database = database or os.getenv('CLICKHOUSE_DATABASE', 'default')
-        
+    def __init__(self):
         self.client = clickhouse_connect.get_client(
-            host=self.host,
-            port=self.port,
-            username=self.username,
-            password=self.password,
-            database=self.database
+            host=Config.CLICKHOUSE_HOST,
+            port=Config.CLICKHOUSE_PORT,
+            username=Config.CLICKHOUSE_USER,
+            password=Config.CLICKHOUSE_PASSWORD,
+            database=Config.CLICKHOUSE_DATABASE
         )
         self._initialize_tables()
 
     def _initialize_tables(self):
         """
         Creates necessary tables in ClickHouse if they do not exist.
-        Using Nullable types to handle missing data from API responses.
         """
         # 1. Stock Prices Table
         self.client.command("""
@@ -72,7 +61,6 @@ class ClickHouseStockHandler:
         """)
 
         # 3. Financial Ratios Table
-        # We'll use a long format (code, reportDate, ratioCode, value)
         self.client.command("""
             CREATE TABLE IF NOT EXISTS financial_ratios (
                 code String,
@@ -83,20 +71,28 @@ class ClickHouseStockHandler:
             ORDER BY (code, reportDate, ratioCode)
         """)
 
+        # 4. Stock Analysis Embeddings (Vector storage for Step 4)
+        # Using Array(Float32) for vector storage
+        self.client.command("""
+            CREATE TABLE IF NOT EXISTS stock_analysis_vectors (
+                code String,
+                analysis_date DateTime DEFAULT now(),
+                analysis_text String,
+                vector Array(Float32),
+                metadata String
+            ) ENGINE = MergeTree()
+            ORDER BY (code, analysis_date)
+        """)
+
     def insert_stock_data(self, data_dict):
         """
         Inserts data from StockDataProvider.get_comprehensive_data() into ClickHouse.
-        
-        Args:
-            data_dict (dict): Dictionary containing pandas DataFrames
         """
         # Insert Stock Prices
         df_prices = data_dict.get('stock_prices')
         if df_prices is not None and not df_prices.empty:
-            print(f"Inserting {len(df_prices)} stock price records...")
             if 'date' in df_prices.columns:
                 df_prices['date'] = pd.to_datetime(df_prices['date'])
-            # Only keep columns that exist in the table to avoid insertion errors
             valid_cols = ['code', 'date', 'open', 'high', 'low', 'close', 'volume', 
                          'adLow', 'adHigh', 'adOpen', 'adClose', 'adAverage', 
                          'nmVolume', 'nmValue', 'ptVolume', 'ptValue', 'change', 'pctChange']
@@ -106,13 +102,10 @@ class ClickHouseStockHandler:
         # Insert Financial Ratios
         df_ratios = data_dict.get('financial_ratios')
         if df_ratios is not None and not df_ratios.empty:
-            print(f"Inserting {len(df_ratios)} financial ratio records...")
             if 'reportDate' in df_ratios.columns:
                 df_ratios['reportDate'] = pd.to_datetime(df_ratios['reportDate'])
             
-            # If the API returns pivoted columns, we need to melt it
             if 'ratioCode' not in df_ratios.columns:
-                # Assuming code and reportDate are identifiers, the rest are ratio codes
                 id_vars = [c for c in ['code', 'reportDate'] if c in df_ratios.columns]
                 df_ratios = df_ratios.melt(id_vars=id_vars, var_name='ratioCode', value_name='value')
             
@@ -123,7 +116,6 @@ class ClickHouseStockHandler:
         # Insert Financial Statements
         df_statements = data_dict.get('financial_statements')
         if df_statements is not None and not df_statements.empty:
-            print(f"Inserting {len(df_statements)} financial statement records...")
             if 'fiscalDate' in df_statements.columns:
                 df_statements['fiscalDate'] = pd.to_datetime(df_statements['fiscalDate'])
             
@@ -131,11 +123,18 @@ class ClickHouseStockHandler:
             insert_df = df_statements[[c for c in valid_cols if c in df_statements.columns]]
             self.client.insert_df('financial_statements', insert_df)
 
+    def insert_analysis_vector(self, code, text, vector, metadata=None):
+        """
+        Inserts analysis result and its embedding vector.
+        """
+        data = [[code, text, vector, metadata or ""]]
+        self.client.insert('stock_analysis_vectors', data, column_names=['code', 'analysis_text', 'vector', 'metadata'])
+
 def save_data_after_provider(stock_code, start_date=None, end_date=None):
     """
     Convenience function to fetch and save data.
     """
-    from stock_data_provider import StockDataProvider
+    from data_collectors.financial_provider import StockDataProvider
     
     provider = StockDataProvider(stock_code)
     data = provider.get_comprehensive_data(start_date=start_date, end_date=end_date)
